@@ -1,0 +1,65 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: syft-generate-sbom
+
+spec:
+  description: >-
+    Generate an SBOM from a container image
+  params:
+  - name: image
+    description: Name (reference) of the container image
+  - name: syft-image
+    description: The syft image to use to generate the SBOM
+    # default: 'docker.io/anchore/syft:v0.21'
+    default: 'ghcr.io/wagoodman/syft:dev'
+
+  workspaces:
+  - name: image-content
+    optional: true
+  - name: output
+
+  results:
+    - name: sbom-filename
+      description: The name of the SBOM file generated in the output workspace
+
+  steps:
+  - name: generate-sbom
+    image: $(params.syft-image)
+    command:
+    - /syft
+    - power-user
+    - -vv
+    - $(params.image)
+    - -f$(workspaces.output.path)/sbom.json
+
+  - name: sbom-package-summary
+    image: python:slim
+    env:
+      - name: REPORT_PATH
+        value: $(workspaces.output.path)/sbom.json
+    script: |
+      #!/usr/bin/env python
+      import json
+      import os
+      import sys
+
+      with open(os.environ["REPORT_PATH"]) as f:
+          contents = json.load(f)
+
+      if len(contents["artifacts"]) == 0:
+        print("No packages found")
+        sys.exit(0)
+
+      print(f"{'NAME':30s} {'VERSION':20s} {'TYPE':7s}")
+      for artifact in contents["artifacts"]:
+          print(f"{artifact['name']:30s} {artifact['version']:20s} {artifact['type']:7s}")
+
+
+  # TODO: make this filename configurable?
+  - name: capture-sbom-filename
+    image: bash:latest
+    script: |
+      #!/usr/bin/env bash
+      echo -n sbom.json | tee $(results.sbom-filename.path)
+

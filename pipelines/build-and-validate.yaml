@@ -1,0 +1,173 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: build-and-validate
+spec:
+
+  workspaces:
+    - name: share
+
+  params:
+    - name: git-repo-url
+      type: string
+    - name: image-name
+      type: string
+    - name: git-repo-ref
+      type: string
+    - name: dockerfile-path
+      type: string
+      default: 'Dockerfile'
+
+  tasks:
+    - name: generate-build-id
+      taskRef:
+        name: generate-build-id
+      params:
+        - name: base-version
+          value: $(params.git-repo-ref)
+
+
+    - name: fetch-repository
+      taskRef:
+        name: git-clone
+      runAfter:
+        - generate-build-id
+      workspaces:
+        - name: output
+          workspace: share
+      params:
+        - name: url
+          value: $(params.git-repo-url)
+        - name: revision
+          value: $(params.git-repo-ref)
+        - name: sslVerify
+          value: 'false'
+        - name: deleteExisting
+          value: 'true'
+        - name: subdirectory
+          value: build-$(tasks.generate-build-id.results.build-id)
+
+
+    - name: fetch-and-prep-assets
+      taskRef:
+        name: prep-assets
+      runAfter:
+        - fetch-repository
+      workspaces:
+        - name: source
+          workspace: share
+      params:
+      - name: subdirectory
+        value: build-$(tasks.generate-build-id.results.build-id)
+
+
+    - name: build-image
+      taskRef:
+        name: kaniko-cache-build
+        kind: Task
+      runAfter:
+        - fetch-repository
+        - fetch-and-prep-assets
+      workspaces:
+        - name: source
+          workspace: share
+      params:
+      - name: IMAGE
+        value: $(params.image-name):git-$(params.git-repo-ref)
+      - name: CONTEXT
+        value: build-$(tasks.generate-build-id.results.build-id)
+      - name: DOCKERFILE
+        value: $(params.dockerfile-path)
+      - name: EXTRA_ARGS
+        value:
+          - '--reproducible'
+          - '--label'
+          - 'build=$(tasks.generate-build-id.results.build-id)'
+          # keniko will build our image and store the it as an OCI formatted layout into our workspace directory 
+          - '--oci-layout-path=$(workspaces.source.path)/oci-$(tasks.generate-build-id.results.build-id)'
+          - '--cache-repo=$(params.image-name)'
+          # - '--verbosity=debug'
+
+
+    - name: generate-sbom
+      taskRef:
+        name: syft-generate-sbom
+        kind: Task
+      runAfter:
+        - build-image
+      workspaces:
+        - name: image-content
+          workspace: share
+        - name: output
+          workspace: share
+      params:
+      - name: image
+        # we are going to generate our SBOM from a local directory that contains the built OCI formatted image
+        value: oci-dir:$(workspaces.image-content.path)/oci-$(tasks.generate-build-id.results.build-id)
+
+
+    - name: vulnerability-scan
+      taskRef:
+        name: grype-vulnerability-scan
+        kind: Task
+      runAfter:
+        - generate-sbom
+      workspaces:
+        - name: scan-target
+          workspace: share
+        - name: output
+          workspace: share
+      params:
+      - name: input
+        value: sbom:$(workspaces.scan-target.path)/$(tasks.generate-sbom.results.sbom-filename)
+      - name: extra-args
+        # change this value to fail on different vulnerability severity values. 
+        # allowable values: negligible low medium high critical
+        value: --fail-on high
+
+
+    - name: secrets-quality-gate
+      taskRef:
+        name: secrets-quality-gate
+        kind: Task
+      runAfter:
+        - generate-sbom
+      workspaces:
+        - name: scan-target
+          workspace: share
+      params:
+      - name: sbom-filename
+        value: $(tasks.generate-sbom.results.sbom-filename)
+
+
+    - name: publish-image
+      taskRef:
+        name: skopeo-copy
+        kind: Task
+      runAfter:
+        - generate-sbom
+        - vulnerability-scan
+      workspaces:
+        - name: images-url
+          workspace: share
+      params:
+      - name: srcImageURL
+        value: 'oci:$(workspaces.images-url.path)/oci-$(tasks.generate-build-id.results.build-id)'
+      - name: destImageURL
+        value: 'docker://$(params.image-name):git-$(params.git-repo-ref)'
+
+
+    - name: publish-sbom
+      taskRef:
+        name: cosign-attach-sbom
+        kind: Task
+      runAfter:
+        - publish-image
+      workspaces:
+        - name: input
+          workspace: share
+      params:
+      - name: image
+        value: $(params.image-name):git-$(params.git-repo-ref)
+      - name: sbom-filename
+        value: $(tasks.generate-sbom.results.sbom-filename)

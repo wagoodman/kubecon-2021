@@ -1,0 +1,4 @@
+git-clone: 0.2
+generate-build-id: 0.1
+skopeo-copy: 0.1
+kubernetes-actions: 0.2

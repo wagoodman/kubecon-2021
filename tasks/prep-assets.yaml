@@ -1,0 +1,37 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: prep-assets
+
+spec:
+  description: >-
+    Build and collect assets needed in the final image
+
+  params:
+    - name: asset-token-secret
+      type: string
+      description: name of the secret holding the token to access secret assets
+      default: asset-token
+
+    - name: subdirectory
+      type: string
+      description: the path within the source workspace where the repo resides
+      default: ""
+
+  workspaces:
+  - name: source
+    description: Holds the source repo
+
+  steps:
+  - name: prep-assets
+    image: bash:latest
+    script: |
+      #!/usr/bin/env bash
+      cd $(workspaces.source.path)/$(params.subdirectory)
+      ./scripts/prep-assets.sh
+    env:
+      - name: API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: $(params.asset-token-secret)
+            key: token
