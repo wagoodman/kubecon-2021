@@ -11,8 +11,7 @@ spec:
     description: Name (reference) of the container image
   - name: syft-image
     description: The syft image to use to generate the SBOM
-    # default: 'docker.io/anchore/syft:v0.21'
-    default: 'ghcr.io/wagoodman/syft:dev'
+    default: 'docker.io/anchore/syft:v0.25.0'
 
   workspaces:
   - name: image-content
@@ -31,7 +30,8 @@ spec:
     - power-user
     - -vv
     - $(params.image)
-    - -f$(workspaces.output.path)/sbom.json
+    - --file
+    - $(workspaces.output.path)/sbom.json
 
   - name: sbom-package-summary
     image: python:slim

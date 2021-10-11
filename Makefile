@@ -14,19 +14,13 @@ run-all-scenarios:
 	tkn pipeline start build-and-validate \
 		$(RUN_PARAMS) \
 		--showlog \
-		-p git-repo-ref=bfda665e81023bf46b296c9c179f8818f5dce190 || true
+		-p git-repo-ref=12c3dfaa6cef62f39b95d7ef7e845644ab397477 || true
 
-	# # let's get an example of the app failing due to a secrets (tag 2-remediate-nltk)
-	# tkn pipeline start build-and-validate \
-	# 	$(RUN_PARAMS) \
-	# 	--showlog \
-	# 	-p git-repo-ref=46744628d2e63cb0ba7e810488549c39e2d517a5 || true
-
-	# let's get a passing build (tag 3-remediate-secret-leak)
+	# let's get a passing build (tag 2-after-remediation)
 	tkn pipeline start build-and-validate \
 		$(RUN_PARAMS) \
 		--showlog \
-		-p git-repo-ref=4f5e6e4a05a2134ffbcb6e4802c72bc301594ebe
+		-p git-repo-ref=c3067e40f18c8c94003acfc6fe8ec31a1c91af8f
 
 .PHONY: install-tekton
 install-tekton:

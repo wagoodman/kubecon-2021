@@ -28,9 +28,9 @@ If you plan to publish to a registry, then you will need to set the following en
     make install-tekton
     ```
 
-2. Install pipeline and tasks
+2. Install pipeline, tasks, and a fake secret for the demo
     ```bash
-    make install
+    make install install-fake-secret
     ```
 
 3. Run the pipeline for all scenarios (one run with quality gate failures, another run after remediations):
