@@ -53,5 +53,5 @@ If you want to follow along in the Tekton dashboard UI and you have a local Kube
 1. Uninstall tekton:
     
     ```bash
-    make iunnstall-tekton
+    make uninstall-tekton
     ```
